@@ -120,6 +120,8 @@ Horario de partida B→C > Horario de partida A→B
 ## 👩🏻‍💻Arquitetura 
 
 ### 🖧 Componentes
+  Socket: Interface de software pela qual um processo envia e recebe mensagens de e para a rede. Ele funciona de maneira lógica como a "porta" entre a camada de aplicação (controlada pelo desenvolvedor) e a camada de transporte (controlada pelo sistema operacional) dentro de um hospedeiro.
+
 
 
 

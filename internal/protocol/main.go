@@ -57,7 +57,6 @@ type SearchRoute struct {
 //Não precisa de payload
 
 // Consulta de reserva por usuário
-// Confirmação de reserva por usuário
 type SearchBooking struct {
 	RideID string `json:"ride_id"`
 }
