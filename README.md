@@ -120,10 +120,10 @@ Horario de partida B→C > Horario de partida A→B
 ## 👩🏻‍💻Arquitetura 
 
 ### 🖧 Componentes
-  Socket: Interface de software pela qual um processo envia e recebe mensagens de e para a rede. Ele funciona de maneira lógica como a "porta" entre a camada de aplicação (controlada pelo desenvolvedor) e a camada de transporte (controlada pelo sistema operacional) dentro de um hospedeiro.
-
-
-
+  **Goroutine**: Interface de software pela qual um processo envia e recebe mensagens de e para a rede.(socket TCP)
+  * É orientado a conexões ponto a ponto e full-duplex,onde cada socket de conexão ativa é identificado por uma tupla de **quatro elementos**: (*endereço IP de origem, porta de origem, endereço IP de destino, porta de destino*)
+  * É criado um socket para cada cliente
+  
 
 Esqueleto da requisição:
 ````
