@@ -38,7 +38,7 @@ qualquer intermediação humana.
 | --- | --- |
 | Autenticação de usuário | |
 | Autenticação de motorista | |
-| Publicação de carona | Publicação de carona contendo orota, data, assentos e preço por trecho  |
+| Publicação de carona | Publicação de carona contendo rota, data, assentos e preço por trecho  |
 | Consulta de carona  | Motorista pode consultar carona já publicada bem como os passageiros |
 | Cancelar carona | O motorista pode cancelar uma carona  |
 | Buscar itnerários| O usuário buscar itinerários entre uma origem e um destino em uma data|

@@ -81,7 +81,7 @@ func (c *Cliente) EnviarRequisicao(action string, payload interface{}) (*protoco
 	return &resp, nil
 }
 
-func autenticarPassageiro(cliente *Cliente, reader *bufio.Reader) {
+func autenticarPassageiro(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
 	fmt.Print("Digite seu Usuário: ")
 	user, _ := reader.ReadString('\n')
 	user = strings.TrimSpace(user)
@@ -90,21 +90,15 @@ func autenticarPassageiro(cliente *Cliente, reader *bufio.Reader) {
 	password, _ := reader.ReadString('\n')
 	password = strings.TrimSpace(password)
 
-	authPayload := protocol.UserAuth{
+	payload := protocol.UserAuth{
 		Login:    []string{user},
 		Password: password,
 	}
 
-	resp, err := cliente.EnviarRequisicao("auth_user", authPayload)
-	if err != nil {
-		fmt.Printf("❌ Erro ao enviar requisição: %v\n", err)
-		return
-	}
-
-	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
+	return "auth_user", payload, true
 }
 
-func buscarItinerarios(cliente *Cliente, reader *bufio.Reader) {
+func buscarItinerarios(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
 	fmt.Print("Cidade de Origem: ")
 	origem, _ := reader.ReadString('\n')
 	origem = strings.TrimSpace(origem)
@@ -117,37 +111,36 @@ func buscarItinerarios(cliente *Cliente, reader *bufio.Reader) {
 	data, _ := reader.ReadString('\n')
 	data = strings.TrimSpace(data)
 
-	searchPayload := protocol.SearchRoute{
+	payload := protocol.SearchRoute{
 		Source:      origem,
 		Destination: destino,
 		ArrivalTime: data,
 	}
 
-	resp, err := cliente.EnviarRequisicao("search_route", searchPayload)
-	if err != nil {
-		fmt.Printf("❌ Erro na busca: %v\n", err)
-		return
-	}
-
-	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
+	return "search_route", payload, true
 }
 
 func reservarItinerario(cliente *Cliente, reader *bufio.Reader) {
-	fmt.Print("Digite o ID do itinerário/trechos que deseja reservar: ")
-	itinerarioID, _ := reader.ReadString('\n')
-	itinerarioID = strings.TrimSpace(itinerarioID)
+	fmt.Print("Cidade de Origem: ")
+	origem, _ := reader.ReadString('\n')
+	origem = strings.TrimSpace(origem)
 
-	bookPayload := protocol.SearchBooking{
-		RideID: itinerarioID,
+	fmt.Print("Cidade de Destino: ")
+	destino, _ := reader.ReadString('\n')
+	destino = strings.TrimSpace(destino)
+
+	fmt.Print("Data desejada (ex: 2026-09-10): ")
+	data, _ := reader.ReadString('\n')
+	data = strings.TrimSpace(data)
+
+	payload := protocol.SearchRoute{
+		Source:      origem,
+		Destination: destino,
+		ArrivalTime: data,
 	}
 
-	resp, err := cliente.EnviarRequisicao("book_ride", bookPayload)
-	if err != nil {
-		fmt.Printf("❌ Erro ao reservar: %v\n", err)
-		return
-	}
+	return "book_ride", payload, true
 
-	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
 }
 
 func consultarReservas(cliente *Cliente) {
@@ -204,22 +197,37 @@ func main() {
 		opcao, _ := reader.ReadString('\n')
 		opcao = strings.TrimSpace(opcao)
 
+		var action string
+		var payload interface{}
+		var deveEnviar bool
+
 		switch opcao {
 		case "1":
-			autenticarPassageiro(cliente, reader)
+			action, payload, deveEnviar = autenticarPassageiro(cliente, reader)
 		case "2":
-			buscarItinerarios(cliente, reader)
+			action, payload, deveEnviar = buscarItinerarios(cliente, reader)
 		case "3":
-			reservarItinerario(cliente, reader)
+			action, payload, deveEnviar = reservarItinerario(cliente, reader)
 		case "4":
-			consultarReservas(cliente)
+			action, payload, deveEnviar = consultarReservas(cliente)
 		case "5":
-			cancelarReserva(cliente, reader)
+			action, payload, deveEnviar = cancelarReserva(cliente, reader)
 		case "6":
-			fmt.Println("Encerrando conexão do passageiro...")
+			fmt.Println("Encerrando conexão...")
 			return
 		default:
-			fmt.Println("Opção inválida. Tente novamente.")
+			fmt.Println("Opção inválida.")
+			continue
+		}
+
+		//Envia a requisição se a função capturou os dados com sucesso
+		if deveEnviar {
+			resp, err := cliente.EnviarRequisicao(action, payload)
+			if err != nil {
+				fmt.Printf("❌ Erro de comunicação: %v\n", err)
+			} else {
+				fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
+			}
 		}
 	}
 }

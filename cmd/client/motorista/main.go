@@ -106,21 +106,57 @@ func autenticarMotorista(cliente *Cliente, reader *bufio.Reader) {
 }
 
 func publicarCarona(cliente *Cliente, reader *bufio.Reader) {
-	fmt.Print("Digite o local de origem: ")
-	origem, _ := reader.ReadString('\n')
-	origem = strings.TrimSpace(origem)
+	// 1. Coleta a rota completa (ex: Feira de Santana, Salvador, Aracaju)
+	fmt.Print("Digite as cidades da rota (separadas por vírgula): ")
+	rotaInput, _ := reader.ReadString('\n')
+	rotaInput = strings.TrimSpace(rotaInput)
 
-	fmt.Print("Digite o local de destino: ")
-	destino, _ := reader.ReadString('\n')
-	destino = strings.TrimSpace(destino)
+	// Converte a string em um slice []string
+	cidadesRaw := strings.Split(rotaInput, ",")
+	var rota []string
+	for _, c := range cidadesRaw {
+		cidadeTratada := strings.TrimSpace(c)
+		if cidadeTratada != "" {
+			rota = append(rota, cidadeTratada)
+		}
+	}
 
-	fmt.Print("Digite a data da carona (ex: 2026-09-10): ")
-	data, _ := reader.ReadString('\n')
-	data = strings.TrimSpace(data)
+	if len(rota) < 2 {
+		fmt.Println(" A rota precisa ter pelo menos 2 cidades (origem e destino).")
+		return
+	}
 
-	// todo
+	// Coleta a data/horário de partida
+	fmt.Print("Horário de partida (ex: 2026-09-12 18:00): ")
+	depTime, _ := reader.ReadString('\n')
+	depTime = strings.TrimSpace(depTime)
 
-	fmt.Printf("Publicando carona de %s para %s no dia %s...\n", origem, destino, data)
+	// Coleta a capacidade de assentos
+	fmt.Print("Quantidade de vagas disponíveis: ")
+	var vagas int
+	fmt.Scanln(&vagas)
+
+	// Coleta o preço por trecho
+	fmt.Print("Preço por trecho (R$): ")
+	var preco float64
+	fmt.Scanln(&preco)
+
+	// Monta o payload conforme a struct PushRide
+	payload := protocol.PushRide{
+		Route:           rota,
+		DepartureTime:   depTime,
+		Capacity:        vagas,
+		PricePerSegment: preco,
+	}
+
+	// Envia a requisição via socket
+	resp, err := cliente.EnviarRequisicao("publish_ride", payload)
+	if err != nil {
+		fmt.Printf("Erro ao publicar carona: %v\n", err)
+		return
+	}
+
+	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
 }
 
 func consultarCaronas(cliente *Cliente) {
@@ -142,14 +178,14 @@ func main() {
 	//Tenta conectar ao Servidor Central
 	conn, err := conectarAoServidor("localhost:9593", 5)
 	if err != nil {
-		fmt.Printf("❌ Erro ao conectar: %v\n", err)
+		fmt.Printf(" Erro ao conectar: %v\n", err)
 		os.Exit(1)
 	}
 	defer conn.Close()
 
 	//Cria a instância do cliente
 	cliente := newCliente("Passageiro", conn)
-	fmt.Println("✔ Conectado com sucesso ao Servidor Central do VaiJunto!")
+	fmt.Println("Conectado com sucesso ao Servidor Central do VaiJunto!")
 
 	// Executa o loop do menu
 	reader := bufio.NewReader(os.Stdin)
