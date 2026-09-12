@@ -2,51 +2,232 @@ package server
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
-	"strings"
+	"sync"
+
+	protocol "github.com/mclara9593/caronas/internal/protocol"
 )
 
-//ações do motorista
-
-func autenticarMotorista(conn net.Conn, reader *bufio.Reader) {
-	fmt.Print("Digite seu Usuário: ")
-	user, _ := reader.ReadString('\n')
-	user = strings.TrimSpace(user)
-
-	// Aqui você monta a estrutura JSON da requisição e envia pelo socket [2]
-	fmt.Printf("Enviando solicitação de autenticação para o usuário: %s...\n", user)
+// Server gerencia as conexões ativas e o estado compartilhado
+type Server struct {
+	addr     string
+	listener net.Listener
+	mu       sync.Mutex
+	// Aqui no futuro você injeta a estrutura do Grafo de itinerários
 }
 
-func publicarCarona(conn net.Conn, reader *bufio.Reader) {
-	fmt.Print("Digite as cidades da rota separadas por vírgula (ex: Salvador,Feira,Conquista): ")
-	rotaInput, _ := reader.ReadString('\n')
-	rotaInput = strings.TrimSpace(rotaInput)
-
-	fmt.Print("Data e Hora de Partida (ex: 2026-09-10 08:00): ")
-	data, _ := reader.ReadString('\n')
-	data = strings.TrimSpace(data)
-
-	fmt.Print("Quantidade de assentos livres: ")
-	assentos, _ := reader.ReadString('\n')
-	assentos = strings.TrimSpace(assentos)
-
-	fmt.Print("Preço cobrado por trecho (R$): ")
-	preco, _ := reader.ReadString('\n')
-	preco = strings.TrimSpace(preco)
-
-	// Esses dados capturados serão serializados em JSON e enviados ao servidor [2]
-	fmt.Println("Processando publicação de carona...")
+// NovoServidor instancia o servidor TCP
+func NovoServidor(addr string) *Server {
+	return &Server{
+		addr: addr,
+	}
 }
 
-func consultarCaronas(conn net.Conn) {
-	fmt.Println("Requisitando histórico de caronas publicadas ao servidor...")
+// Iniciar abre a porta e escuta conexões TCP de clientes
+func (s *Server) Iniciar() error {
+	l, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return fmt.Errorf("erro ao iniciar escuta TCP na porta %s: %w", s.addr, err)
+	}
+	s.listener = l
+	defer s.listener.Close()
+
+	fmt.Printf("Servidor Central na porta %s \n", s.addr)
+
+	for {
+		conn, err := s.listener.Accept()
+		if err != nil {
+			fmt.Printf("Erro ao aceitar conexão: %v\n", err)
+			continue
+		}
+
+		// Trata cada novo cliente em uma goroutine isolada
+		go s.tratarCliente(conn)
+	}
 }
 
-func cancelarCarona(conn net.Conn, reader *bufio.Reader) {
-	fmt.Print("Digite o ID da Carona que deseja cancelar: ")
-	id, _ := reader.ReadString('\n')
-	id = strings.TrimSpace(id)
+// tratarCliente gerencia o ciclo de vida do socket TCP do cliente
+func (s *Server) tratarCliente(conn net.Conn) {
+	defer conn.Close()
+	fmt.Printf("Novo cliente conectado: %s\n", conn.RemoteAddr().String())
 
-	fmt.Printf("Enviando solicitação de cancelamento para a carona %s...\n", id)
+	reader := bufio.NewReader(conn)
+
+	for {
+		// Lê a linha JSON demarcada por '\n'
+		linha, err := reader.ReadBytes('\n')
+		if err != nil {
+			if err == io.EOF {
+				fmt.Printf("Cliente %s desconectou.\n", conn.RemoteAddr().String())
+			} else {
+				fmt.Printf(" Erro de leitura do cliente %s: %v\n", conn.RemoteAddr().String(), err)
+			}
+			return
+		}
+
+		// Desempacota o envelope da requisição
+		var req protocol.Request
+		if err := json.Unmarshal(linha, &req); err != nil {
+			s.enviarErro(conn, "", "Formato JSON inválido")
+			continue
+		}
+
+		// Roteia a solicitação conforme a Ação (Action)
+		s.rotearRequisicao(conn, &req)
+	}
+}
+
+// rotearRequisicao lê o 'Action' e redireciona para a função correspondente
+func (s *Server) rotearRequisicao(conn net.Conn, req *protocol.Request) {
+	switch req.Action {
+
+	// --- AÇÕES DO MOTORISTA ---
+	case "auth_conductor":
+		s.handleAuthConductor(conn, req)
+	case "publish_ride":
+		s.handlePublishRide(conn, req)
+	case "cancel_ride":
+		s.handleCancelRide(conn, req)
+
+	// --- AÇÕES DO PASSAGEIRO ---
+	case "auth_user":
+		s.handleAuthUser(conn, req)
+	case "search_route":
+		s.handleSearchRoute(conn, req)
+	case "book_ride":
+		s.handleBookRide(conn, req)
+	case "get_bookings":
+		s.handleGetBookings(conn, req)
+	case "cancel_booking":
+		s.handleCancelBooking(conn, req)
+
+	default:
+		s.enviarErro(conn, req.RequestID, "Ação não reconhecida pelo servidor")
+	}
+}
+
+// ==========================================
+// HANDLERS DO MOTORISTA
+// ==========================================
+
+func (s *Server) handleAuthConductor(conn net.Conn, req *protocol.Request) {
+	var payload protocol.ConductorAuth
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		s.enviarErro(conn, req.RequestID, "Payload de autenticação inválido")
+		return
+	}
+
+	// TODO: Validar credenciais na memória/storage
+	s.enviarSucesso(conn, req.RequestID, "Motorista autenticado com sucesso!", nil)
+}
+
+func (s *Server) handlePublishRide(conn net.Conn, req *protocol.Request) {
+	var payload protocol.PushRide
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		s.enviarErro(conn, req.RequestID, "Payload de publicação inválido")
+		return
+	}
+
+	// TODO: Inserir trechos no GRAFO de itinerários
+	s.enviarSucesso(conn, req.RequestID, "Carona publicada no Grafo com sucesso!", nil)
+}
+
+func (s *Server) handleCancelRide(conn net.Conn, req *protocol.Request) {
+	var payload protocol.CancelSearchRide
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		s.enviarErro(conn, req.RequestID, "Payload de cancelamento inválido")
+		return
+	}
+
+	// TODO: Remover do Grafo e notificar passageiros afetados
+	s.enviarSucesso(conn, req.RequestID, "Carona cancelada com sucesso!", nil)
+}
+
+// ==========================================
+// HANDLERS DO PASSAGEIRO
+// ==========================================
+
+func (s *Server) handleAuthUser(conn net.Conn, req *protocol.Request) {
+	var payload protocol.UserAuth
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		s.enviarErro(conn, req.RequestID, "Payload inválido")
+		return
+	}
+
+	// TODO: Validar dados do cliente no Storage em memória
+	s.enviarSucesso(conn, req.RequestID, "Passageiro autenticado com sucesso!", nil)
+}
+
+func (s *Server) handleSearchRoute(conn net.Conn, req *protocol.Request) {
+	var payload protocol.SearchRoute
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		s.enviarErro(conn, req.RequestID, "Payload de busca inválido")
+		return
+	}
+
+	// TODO: Consultar os caminhos (Dijkstra / BFS) no Grafo
+	s.enviarSucesso(conn, req.RequestID, "Itinerários encontrados", nil)
+}
+
+func (s *Server) handleBookRide(conn net.Conn, req *protocol.Request) {
+	var payload protocol.SearchBooking
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		s.enviarErro(conn, req.RequestID, "Payload de reserva inválido")
+		return
+	}
+
+	// TODO: Executar transação atômica nos assentos do Grafo
+	s.enviarSucesso(conn, req.RequestID, "Reserva confirmada de forma atômica!", nil)
+}
+
+func (s *Server) handleGetBookings(conn net.Conn, req *protocol.Request) {
+	// TODO: Retornar histórico do passageiro
+	s.enviarSucesso(conn, req.RequestID, "Reservas encontradas", nil)
+}
+
+func (s *Server) handleCancelBooking(conn net.Conn, req *protocol.Request) {
+	var payload protocol.CancelBooking
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		s.enviarErro(conn, req.RequestID, "Payload de cancelamento inválido")
+		return
+	}
+
+	// TODO: Incrementar novamente a vaga do assento no Grafo
+	s.enviarSucesso(conn, req.RequestID, "Reserva cancelada!", nil)
+}
+
+// AUXILIARES DE RESPOSTA TCP/JSON
+
+func (s *Server) enviarSucesso(conn net.Conn, reqID string, msg string, payload interface{}) {
+	var rawPayload json.RawMessage
+	if payload != nil {
+		rawPayload, _ = json.Marshal(payload)
+	}
+
+	resp := protocol.Response{
+		RequestID: reqID,
+		Status:    "SUCCESS",
+		Message:   msg,
+		Payload:   rawPayload,
+	}
+
+	s.escreverResponse(conn, resp)
+}
+
+func (s *Server) enviarErro(conn net.Conn, reqID string, msg string) {
+	resp := protocol.Response{
+		RequestID: reqID,
+		Status:    "ERROR",
+		Message:   msg,
+	}
+
+	s.escreverResponse(conn, resp)
+}
+
+func (s *Server) escreverResponse(conn net.Conn, resp protocol.Response) {
+	bytes, _ := json.Marshal(resp)
+	conn.Write(append(bytes, '\n'))
 }

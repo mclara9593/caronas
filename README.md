@@ -33,12 +33,6 @@ caronas que pretendem realizar e os passageiros consultam e reservam assentos pe
 qualquer intermediação humana.
 
 
-Além do servidor central que mantém o estado das caronas e das reservas, os seguintes componentes do
-produto devem ser implementados e apresentados pelo aluno:
-
-
-
-
 ### Funcionais
 | Requisito | Descrição |
 | --- | --- |
@@ -102,7 +96,7 @@ source ~/.bashrc
 
 ## 💻Solução
 
-### Protocolo de comunicação cliente servidor
+### protocol de comunicação cliente servidor
 
 ### Roteamento por grafos
 
