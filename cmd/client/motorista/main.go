@@ -136,8 +136,8 @@ func publicarCarona(cliente *Cliente, reader *bufio.Reader) {
 	var vagas int
 	fmt.Scanln(&vagas)
 
-	// Coleta o preço por trecho
-	fmt.Print("Preço por trecho (R$): ")
+	// Coleta o preço por Section
+	fmt.Print("Preço por Section (R$): ")
 	var preco float64
 	fmt.Scanln(&preco)
 

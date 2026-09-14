@@ -131,7 +131,7 @@ func (s *Server) handlePublishRide(conn net.Conn, req *protocol.Request) {
 		return
 	}
 
-	// TODO: Inserir trechos no GRAFO de itinerários
+	// TODO: Inserir Sections no GRAFO de itinerários
 	s.enviarSucesso(conn, req.RequestID, "Carona publicada no Grafo com sucesso!", nil)
 }
 

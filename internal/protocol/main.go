@@ -53,15 +53,8 @@ type SearchRoute struct {
 	ArrivalTime string `json:"arrival_time"`
 }
 
-//Confirmação de reserva por usuário
-//Não precisa de payload
 
-// Consulta de reserva por usuário
-type SearchBooking struct {
-	RideID string `json:"ride_id"`
-}
-
-// Cancelar reserva por usuário
-type CancelBooking struct {
+// Reserva,Consulta de reserva,e cancelamento por usuário
+type GetID struct {
 	RideID string `json:"ride_id"`
 }

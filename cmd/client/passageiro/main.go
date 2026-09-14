@@ -12,6 +12,8 @@ import (
 	"github.com/mclara9593/caronas/internal/protocol"
 )
 
+
+// Função para conectar ao servidor com tentativas limitadas
 func conectarAoServidor(endereco string, maxTentativas int) (net.Conn, error) {
 	var conn net.Conn
 	var err error
@@ -31,12 +33,14 @@ func conectarAoServidor(endereco string, maxTentativas int) (net.Conn, error) {
 	return nil, err
 }
 
+// Estrutura para representar um cliente passageiro
 type Cliente struct {
 	Nome   string
 	Conn   net.Conn
 	Reader *bufio.Reader
 }
 
+// Construtor do Cliente
 func newCliente(nome string, conn net.Conn) *Cliente {
 	return &Cliente{
 		Nome:   nome,
@@ -45,6 +49,8 @@ func newCliente(nome string, conn net.Conn) *Cliente {
 	}
 }
 
+
+// EnviarRequisicao envia qualquer ação/payload e retorna a resposta do servidor
 func (c *Cliente) EnviarRequisicao(action string, payload interface{}) (*protocol.Response, error) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -80,6 +86,10 @@ func (c *Cliente) EnviarRequisicao(action string, payload interface{}) (*protoco
 
 	return &resp, nil
 }
+
+
+// -----------------------------------------------------------------------------------------------
+// Pega entradas do usuário e cria o payload para enviar ao servidor com base no tipo de requisição.
 
 func autenticarPassageiro(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
 	fmt.Print("Digite seu Usuário: ")
@@ -144,32 +154,31 @@ func reservarItinerario(cliente *Cliente, reader *bufio.Reader) {
 }
 
 func consultarReservas(cliente *Cliente) {
-	resp, err := cliente.EnviarRequisicao("get_bookings", nil)
-	if err != nil {
-		fmt.Printf("❌ Erro ao consultar: %v\n", err)
-		return
+	fmt.Print("ID da Reserva: ")
+	idReserva, _ := reader.ReadString('\n')
+	idReserva = strings.TrimSpace(idReserva)
+
+	payload := protocol.GetID{
+		RideID: idReserva,
 	}
 
-	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
+	return "get_bookings", payload, true
+
 }
 
 func cancelarReserva(cliente *Cliente, reader *bufio.Reader) {
-	fmt.Print("Digite o ID da Reserva que deseja cancelar: ")
-	reservaID, _ := reader.ReadString('\n')
-	reservaID = strings.TrimSpace(reservaID)
+	fmt.Print("ID da Reserva: ")
+	idReserva, _ := reader.ReadString('\n')
+	idReserva = strings.TrimSpace(idReserva)
 
-	cancelPayload := protocol.CancelBooking{
-		RideID: reservaID,
+	payload := protocol.GetID{
+		RideID: idReserva,
 	}
 
-	resp, err := cliente.EnviarRequisicao("cancel_booking", cancelPayload)
-	if err != nil {
-		fmt.Printf("❌ Erro ao cancelar: %v\n", err)
-		return
-	}
-
-	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
+	return "cancel_booking", payload, true
 }
+
+//------------------------------------------------------------------------------------------------
 
 func main() {
 	conn, err := conectarAoServidor("localhost: 9593", 5)

@@ -38,11 +38,11 @@ qualquer intermediação humana.
 | --- | --- |
 | Autenticação de usuário | |
 | Autenticação de motorista | |
-| Publicação de carona | Publicação de carona contendo rota, data, assentos e preço por trecho  |
+| Publicação de carona | Publicação de carona contendo rota, data, assentos e preço por Section  |
 | Consulta de carona  | Motorista pode consultar carona já publicada bem como os passageiros |
 | Cancelar carona | O motorista pode cancelar uma carona  |
 | Buscar itnerários| O usuário buscar itinerários entre uma origem e um destino em uma data|
-| Confirmação de reserva |O usuário pode confirmar a reserva de um itinerário composto por um ou mais trechos|
+| Confirmação de reserva |O usuário pode confirmar a reserva de um itinerário composto por um ou mais Sections|
 | Consulta de reserva  | Usuário pode consultar reserva |
 | Cancelar reserva |  Usuário pode cancelar uma reserva  |
 
@@ -103,11 +103,11 @@ source ~/.bashrc
 #### Algoritmos de busca
 
 ## Domínio da solução
-* Disponibilidade de assentos deve ser cobrado por trecho
+* Disponibilidade de assentos deve ser cobrado por Section
 
 * Passageiro que confirma primeiro recebe preferência
 
-* Ao conectar o trecho A→B (Carona X) ao trecho B →C (Carona Y), a partida da segunda carona ocorre após a chegada da primeira:
+* Ao conectar o Section A→B (Carona X) ao Section B →C (Carona Y), a partida da segunda carona ocorre após a chegada da primeira:
 Horario de partida B→C > Horario de partida A→B
 
 
