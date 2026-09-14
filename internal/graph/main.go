@@ -1,27 +1,24 @@
 package main
+
 import (
 	"sync"
-	"time"
 )
 
 type Section struct {
-	IdSection	   	string  `json:"id"`
-	Origem   string  `json:"origem"`
-	Destino  string  `json:"destino"`
-	Assentos int     `json:"assentos"`
-	Preco    float64 `json:"preco"`
+	IdSection string  `json:"id"`
+	Origem    string  `json:"origem"`
+	Destino   string  `json:"destino"`
+	Assentos  int     `json:"assentos"`
+	Preco     float64 `json:"preco"`
 }
-
 
 // Estrutura que representa uma carona, que pode ser composta por múltiplos trechos
 type Ride struct {
-	IdRide		string   `json:"id"`
-	Sections  []Section `json:"Sections"`
-	IdDriver		string   `json:"id_driver"`
+	IdRide     string    `json:"id"`
+	Sections   []Section `json:"Sections"`
+	IdDriver   string    `json:"id_driver"`
 	TotalPrice float64   `json:"total_price"`
-
 }
-
 
 // Grafo representa a rede de viagens e trechos
 type Grafo struct {
@@ -53,11 +50,11 @@ func (g *Grafo) AddRide(idRide string, route []string, seats int, price float64,
 		secID := idRide + "-sec-" + origem + "-" + destino
 
 		sec := Section{
-			ID:       secID,
-			Origem:   origem,
-			Destino:  destino,
-			Assentos: seats,
-			Preco:    price,
+			IdSection: secID,
+			Origem:    origem,
+			Destino:   destino,
+			Assentos:  seats,
+			Preco:     price,
 		}
 
 		rideSections = append(rideSections, sec)
@@ -153,7 +150,7 @@ func (g *Grafo) RemoveRide(idRide string) {
 
 		var atualizados []Section
 		for _, sec := range sectionsOrigem {
-			if sec.ID != secToRemove.ID {
+			if sec.IdSection != secToRemove.IdSection {
 				atualizados = append(atualizados, sec)
 			}
 		}
@@ -168,7 +165,6 @@ func (g *Grafo) RemoveRide(idRide string) {
 	delete(g.Rides, idRide)
 }
 
-
 // AdjustSeats decrementa ou incrementa assentos de forma atômica
 func (g *Grafo) AdjustSeats(sectionIDs []string, delta int) bool {
 	g.mu.Lock()
@@ -180,7 +176,7 @@ func (g *Grafo) AdjustSeats(sectionIDs []string, delta int) bool {
 			encontrado := false
 			for _, list := range g.Nodes {
 				for _, sec := range list {
-					if sec.ID == id {
+					if sec.IdSection == id {
 						encontrado = true
 						if sec.Assentos+delta < 0 {
 							return false
@@ -198,7 +194,7 @@ func (g *Grafo) AdjustSeats(sectionIDs []string, delta int) bool {
 	for _, id := range sectionIDs {
 		for origem, list := range g.Nodes {
 			for i, sec := range list {
-				if sec.ID == id {
+				if sec.IdSection == id {
 					g.Nodes[origem][i].Assentos += delta
 				}
 			}

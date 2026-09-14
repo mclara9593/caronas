@@ -8,21 +8,23 @@ import (
 	"net"
 	"sync"
 
-	protocol "github.com/mclara9593/caronas/internal/protocol"
+	"github.com/mclara9593/caronas/internal/graph"
+	"github.com/mclara9593/caronas/internal/protocol"
 )
 
 // Server gerencia as conexões ativas e o estado compartilhado
 type Server struct {
+	grafo    *graph.Grafo
 	addr     string
 	listener net.Listener
 	mu       sync.Mutex
-	// Aqui no futuro você injeta a estrutura do Grafo de itinerários
 }
 
 // NovoServidor instancia o servidor TCP
 func NovoServidor(addr string) *Server {
 	return &Server{
-		addr: addr,
+		addr:  addr,
+		grafo: graph.NovoGrafo(),
 	}
 }
 
@@ -124,6 +126,7 @@ func (s *Server) handleAuthConductor(conn net.Conn, req *protocol.Request) {
 	s.enviarSucesso(conn, req.RequestID, "Motorista autenticado com sucesso!", nil)
 }
 
+// PUBLICAR CARONA
 func (s *Server) handlePublishRide(conn net.Conn, req *protocol.Request) {
 	var payload protocol.PushRide
 	if err := json.Unmarshal(req.Payload, &payload); err != nil {
@@ -131,19 +134,31 @@ func (s *Server) handlePublishRide(conn net.Conn, req *protocol.Request) {
 		return
 	}
 
-	// TODO: Inserir Sections no GRAFO de itinerários
-	s.enviarSucesso(conn, req.RequestID, "Carona publicada no Grafo com sucesso!", nil)
+	// Gera um ID único para a carona/ride
+	rideID := "ride-" + req.RequestID
+
+	// Chama o Grafo passando os dados extraídos do payload
+	s.grafo.AddRide(
+		rideID,
+		payload.Route,
+		payload.Capacity,
+		payload.PricePerSegment,
+		"driver-default",
+	)
+
+	s.enviarSucesso(conn, req.RequestID, "Carona publicada e inserida no Grafo!", nil)
 }
 
 func (s *Server) handleCancelRide(conn net.Conn, req *protocol.Request) {
-	var payload protocol.CancelSearchRide
+	var payload protocol.GetID
 	if err := json.Unmarshal(req.Payload, &payload); err != nil {
-		s.enviarErro(conn, req.RequestID, "Payload de cancelamento inválido")
+		s.enviarErro(conn, req.RequestID, "Payload inválido")
 		return
 	}
 
-	// TODO: Remover do Grafo e notificar passageiros afetados
-	s.enviarSucesso(conn, req.RequestID, "Carona cancelada com sucesso!", nil)
+	// Remove a carona e desfaz as arestas no Grafo
+	s.grafo.RemoveRide(payload.RideID)
+	s.enviarSucesso(conn, req.RequestID, "Carona removida do Grafo com sucesso!", nil)
 }
 
 // ==========================================
@@ -161,6 +176,7 @@ func (s *Server) handleAuthUser(conn net.Conn, req *protocol.Request) {
 	s.enviarSucesso(conn, req.RequestID, "Passageiro autenticado com sucesso!", nil)
 }
 
+// Buscar rota de viagem
 func (s *Server) handleSearchRoute(conn net.Conn, req *protocol.Request) {
 	var payload protocol.SearchRoute
 	if err := json.Unmarshal(req.Payload, &payload); err != nil {
@@ -168,19 +184,31 @@ func (s *Server) handleSearchRoute(conn net.Conn, req *protocol.Request) {
 		return
 	}
 
-	// TODO: Consultar os caminhos (Dijkstra / BFS) no Grafo
-	s.enviarSucesso(conn, req.RequestID, "Itinerários encontrados", nil)
+	// Executa a busca em largura no Grafo
+	resultados := s.grafo.SearchRoute(payload.Source, payload.Destination)
+
+	// Converte os resultados para JSON antes de devolver ao cliente
+	data, _ := json.Marshal(resultados)
+	s.enviarSucesso(conn, req.RequestID, "Itinerários encontrados", data)
 }
 
+// Efetuar reserva
 func (s *Server) handleBookRide(conn net.Conn, req *protocol.Request) {
-	var payload protocol.SearchBooking
+	var payload protocol.GetID
 	if err := json.Unmarshal(req.Payload, &payload); err != nil {
 		s.enviarErro(conn, req.RequestID, "Payload de reserva inválido")
 		return
 	}
 
-	// TODO: Executar transação atômica nos assentos do Grafo
-	s.enviarSucesso(conn, req.RequestID, "Reserva confirmada de forma atômica!", nil)
+	// Tenta decrementar 1 assento de forma atômica
+	// O RideID aqui pode ser o ID de um trecho ou uma lista de trechos do itinerário
+	sucesso := s.grafo.AdjustSeats([]string{payload.RideID}, -1)
+	if !sucesso {
+		s.enviarErro(conn, req.RequestID, "Não há assentos disponíveis para esta reserva.")
+		return
+	}
+
+	s.enviarSucesso(conn, req.RequestID, "Reserva confirmada com sucesso!", nil)
 }
 
 func (s *Server) handleGetBookings(conn net.Conn, req *protocol.Request) {
@@ -189,14 +217,15 @@ func (s *Server) handleGetBookings(conn net.Conn, req *protocol.Request) {
 }
 
 func (s *Server) handleCancelBooking(conn net.Conn, req *protocol.Request) {
-	var payload protocol.CancelBooking
+	var payload protocol.GetID
 	if err := json.Unmarshal(req.Payload, &payload); err != nil {
 		s.enviarErro(conn, req.RequestID, "Payload de cancelamento inválido")
 		return
 	}
 
-	// TODO: Incrementar novamente a vaga do assento no Grafo
-	s.enviarSucesso(conn, req.RequestID, "Reserva cancelada!", nil)
+	// Incrementa a vaga de volta ao Grafo (+1 assento)
+	s.grafo.AdjustSeats([]string{payload.RideID}, 1)
+	s.enviarSucesso(conn, req.RequestID, "Reserva cancelada e vaga liberada!", nil)
 }
 
 // AUXILIARES DE RESPOSTA TCP/JSON

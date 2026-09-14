@@ -12,21 +12,20 @@ import (
 	"github.com/mclara9593/caronas/internal/protocol"
 )
 
-
 // Função para conectar ao servidor com tentativas limitadas
 func conectarAoServidor(endereco string, maxTentativas int) (net.Conn, error) {
 	var conn net.Conn
 	var err error
 
 	for i := 1; i <= maxTentativas; i++ {
-		fmt.Printf(" Tentando conectar ao Servidor Central (%d/%d)...\n", i, maxTentativas)
+		fmt.Printf("🔌 Tentando conectar ao Servidor Central (%d/%d)...\n", i, maxTentativas)
 
 		conn, err = net.DialTimeout("tcp", endereco, 3*time.Second)
 		if err == nil {
 			return conn, nil
 		}
 
-		fmt.Printf(" Falha na conexão: %v. Tentando novamente em 2 segundos...\n", err)
+		fmt.Printf("⚠️ Falha na conexão: %v. Tentando novamente em 2 segundos...\n", err)
 		time.Sleep(2 * time.Second)
 	}
 
@@ -48,7 +47,6 @@ func newCliente(nome string, conn net.Conn) *Cliente {
 		Reader: bufio.NewReader(conn),
 	}
 }
-
 
 // EnviarRequisicao envia qualquer ação/payload e retorna a resposta do servidor
 func (c *Cliente) EnviarRequisicao(action string, payload interface{}) (*protocol.Response, error) {
@@ -87,9 +85,8 @@ func (c *Cliente) EnviarRequisicao(action string, payload interface{}) (*protoco
 	return &resp, nil
 }
 
-
 // -----------------------------------------------------------------------------------------------
-// Pega entradas do usuário e cria o payload para enviar ao servidor com base no tipo de requisição.
+// Pega entradas do usuário e cria o payload para enviar ao servidor
 
 func autenticarPassageiro(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
 	fmt.Print("Digite seu Usuário: ")
@@ -130,31 +127,22 @@ func buscarItinerarios(cliente *Cliente, reader *bufio.Reader) (string, interfac
 	return "search_route", payload, true
 }
 
-func reservarItinerario(cliente *Cliente, reader *bufio.Reader) {
-	fmt.Print("Cidade de Origem: ")
-	origem, _ := reader.ReadString('\n')
-	origem = strings.TrimSpace(origem)
+// CORRIGIDO: Adicionado (string, interface{}, bool) na assinatura da função
+func reservarItinerario(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
+	fmt.Print("Digite o ID do itinerário/ride para reservar: ")
+	idRide, _ := reader.ReadString('\n')
+	idRide = strings.TrimSpace(idRide)
 
-	fmt.Print("Cidade de Destino: ")
-	destino, _ := reader.ReadString('\n')
-	destino = strings.TrimSpace(destino)
-
-	fmt.Print("Data desejada (ex: 2026-09-10): ")
-	data, _ := reader.ReadString('\n')
-	data = strings.TrimSpace(data)
-
-	payload := protocol.SearchRoute{
-		Source:      origem,
-		Destination: destino,
-		ArrivalTime: data,
+	payload := protocol.GetID{
+		RideID: idRide,
 	}
 
 	return "book_ride", payload, true
-
 }
 
-func consultarReservas(cliente *Cliente) {
-	fmt.Print("ID da Reserva: ")
+// CORRIGIDO: Adicionado o parâmetro reader e os tipos de retorno
+func consultarReservas(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
+	fmt.Print("Digite o ID da Reserva/Passageiro: ")
 	idReserva, _ := reader.ReadString('\n')
 	idReserva = strings.TrimSpace(idReserva)
 
@@ -163,10 +151,10 @@ func consultarReservas(cliente *Cliente) {
 	}
 
 	return "get_bookings", payload, true
-
 }
 
-func cancelarReserva(cliente *Cliente, reader *bufio.Reader) {
+// CORRIGIDO: Adicionado (string, interface{}, bool) na assinatura da função
+func cancelarReserva(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
 	fmt.Print("ID da Reserva: ")
 	idReserva, _ := reader.ReadString('\n')
 	idReserva = strings.TrimSpace(idReserva)
@@ -181,7 +169,8 @@ func cancelarReserva(cliente *Cliente, reader *bufio.Reader) {
 //------------------------------------------------------------------------------------------------
 
 func main() {
-	conn, err := conectarAoServidor("localhost: 9593", 5)
+	// CORRIGIDO: Removido o espaço do "localhost:9593"
+	conn, err := conectarAoServidor("localhost:9593", 5)
 	if err != nil {
 		fmt.Printf("❌ Erro ao conectar: %v\n", err)
 		os.Exit(1)
@@ -218,7 +207,7 @@ func main() {
 		case "3":
 			action, payload, deveEnviar = reservarItinerario(cliente, reader)
 		case "4":
-			action, payload, deveEnviar = consultarReservas(cliente)
+			action, payload, deveEnviar = consultarReservas(cliente, reader) // Passando reader aqui também
 		case "5":
 			action, payload, deveEnviar = cancelarReserva(cliente, reader)
 		case "6":
@@ -229,7 +218,7 @@ func main() {
 			continue
 		}
 
-		//Envia a requisição se a função capturou os dados com sucesso
+		// Envia a requisição se a função capturou os dados com sucesso
 		if deveEnviar {
 			resp, err := cliente.EnviarRequisicao(action, payload)
 			if err != nil {
