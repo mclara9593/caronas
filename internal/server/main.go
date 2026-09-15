@@ -111,9 +111,9 @@ func (s *Server) rotearRequisicao(conn net.Conn, req *protocol.Request) {
 	}
 }
 
-// ==========================================
+// ==========================
 // HANDLERS DO MOTORISTA
-// ==========================================
+// ===========================
 
 func (s *Server) handleAuthConductor(conn net.Conn, req *protocol.Request) {
 	var payload protocol.ConductorAuth
@@ -122,7 +122,6 @@ func (s *Server) handleAuthConductor(conn net.Conn, req *protocol.Request) {
 		return
 	}
 
-	// TODO: Validar credenciais na memória/storage
 	s.enviarSucesso(conn, req.RequestID, "Motorista autenticado com sucesso!", nil)
 }
 
@@ -228,7 +227,9 @@ func (s *Server) handleCancelBooking(conn net.Conn, req *protocol.Request) {
 	s.enviarSucesso(conn, req.RequestID, "Reserva cancelada e vaga liberada!", nil)
 }
 
+// ==================================
 // AUXILIARES DE RESPOSTA TCP/JSON
+// ==================================
 
 func (s *Server) enviarSucesso(conn net.Conn, reqID string, msg string, payload interface{}) {
 	var rawPayload json.RawMessage

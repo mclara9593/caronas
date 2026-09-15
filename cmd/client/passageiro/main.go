@@ -12,7 +12,6 @@ import (
 	"github.com/mclara9593/caronas/internal/protocol"
 )
 
-// Função para conectar ao servidor com tentativas limitadas
 func conectarAoServidor(endereco string, maxTentativas int) (net.Conn, error) {
 	var conn net.Conn
 	var err error
@@ -32,14 +31,12 @@ func conectarAoServidor(endereco string, maxTentativas int) (net.Conn, error) {
 	return nil, err
 }
 
-// Estrutura para representar um cliente passageiro
 type Cliente struct {
 	Nome   string
 	Conn   net.Conn
 	Reader *bufio.Reader
 }
 
-// Construtor do Cliente
 func newCliente(nome string, conn net.Conn) *Cliente {
 	return &Cliente{
 		Nome:   nome,
@@ -48,7 +45,6 @@ func newCliente(nome string, conn net.Conn) *Cliente {
 	}
 }
 
-// EnviarRequisicao envia qualquer ação/payload e retorna a resposta do servidor
 func (c *Cliente) EnviarRequisicao(action string, payload interface{}) (*protocol.Response, error) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -86,24 +82,6 @@ func (c *Cliente) EnviarRequisicao(action string, payload interface{}) (*protoco
 }
 
 // -----------------------------------------------------------------------------------------------
-// Pega entradas do usuário e cria o payload para enviar ao servidor
-
-func autenticarPassageiro(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
-	fmt.Print("Digite seu Usuário: ")
-	user, _ := reader.ReadString('\n')
-	user = strings.TrimSpace(user)
-
-	fmt.Print("Digite sua Senha: ")
-	password, _ := reader.ReadString('\n')
-	password = strings.TrimSpace(password)
-
-	payload := protocol.UserAuth{
-		Login:    []string{user},
-		Password: password,
-	}
-
-	return "auth_user", payload, true
-}
 
 func buscarItinerarios(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
 	fmt.Print("Cidade de Origem: ")
@@ -127,7 +105,6 @@ func buscarItinerarios(cliente *Cliente, reader *bufio.Reader) (string, interfac
 	return "search_route", payload, true
 }
 
-// CORRIGIDO: Adicionado (string, interface{}, bool) na assinatura da função
 func reservarItinerario(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
 	fmt.Print("Digite o ID do itinerário/ride para reservar: ")
 	idRide, _ := reader.ReadString('\n')
@@ -140,20 +117,14 @@ func reservarItinerario(cliente *Cliente, reader *bufio.Reader) (string, interfa
 	return "book_ride", payload, true
 }
 
-// CORRIGIDO: Adicionado o parâmetro reader e os tipos de retorno
 func consultarReservas(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
-	fmt.Print("Digite o ID da Reserva/Passageiro: ")
-	idReserva, _ := reader.ReadString('\n')
-	idReserva = strings.TrimSpace(idReserva)
-
 	payload := protocol.GetID{
-		RideID: idReserva,
+		//
 	}
 
 	return "get_bookings", payload, true
 }
 
-// CORRIGIDO: Adicionado (string, interface{}, bool) na assinatura da função
 func cancelarReserva(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
 	fmt.Print("ID da Reserva: ")
 	idReserva, _ := reader.ReadString('\n')
@@ -166,13 +137,12 @@ func cancelarReserva(cliente *Cliente, reader *bufio.Reader) (string, interface{
 	return "cancel_booking", payload, true
 }
 
-//------------------------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------------------
 
 func main() {
-	// CORRIGIDO: Removido o espaço do "localhost:9593"
 	conn, err := conectarAoServidor("localhost:9593", 5)
 	if err != nil {
-		fmt.Printf("❌ Erro ao conectar: %v\n", err)
+		fmt.Printf("Erro ao conectar: %v\n", err)
 		os.Exit(1)
 	}
 	defer conn.Close()
@@ -183,10 +153,12 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		fmt.Println("\n--- VAIJUNTO: CLIENTE PASSAGEIRO ---")
-		fmt.Println("1. Autenticar-se (Login)")
+		fmt.Println("\n--- VAIJUNTO: PAINEL DO USUÁRIO ---")
+		fmt.Println("1. Cadastrado (1º acesso) ")
+		fmt.Println("2. Login")
+
 		fmt.Println("2. Buscar Itinerários de Carona")
-		fmt.Println("3. Reservar Itinerário (Confirmação Atômica)")
+		fmt.Println("3. Reservar Itinerário")
 		fmt.Println("4. Consultar Minhas Reservas")
 		fmt.Println("5. Cancelar Reserva")
 		fmt.Println("6. Sair")
@@ -195,19 +167,31 @@ func main() {
 		opcao, _ := reader.ReadString('\n')
 		opcao = strings.TrimSpace(opcao)
 
-		var action string
+		// Barreira de Autenticação: Impede acesso às rotas 2, 3, 4 e 5 sem login
+		//if !cliente.IsLogged && (opcao == "2" || opcao == "3" || opcao == "4" || opcao == "5") {
+		//	fmt.Println("\n Acesso negado! Você precisa fazer login (Opção 1) antes de realizar ações.")
+		continue
+		//}
+
+		//var action string
 		var payload interface{}
 		var deveEnviar bool
+		var usuarioTentado string
 
 		switch opcao {
 		case "1":
-			action, payload, deveEnviar = autenticarPassageiro(cliente, reader)
+			if cliente.IsLogged {
+				fmt.Printf("Você já está logado como %s!\n", cliente.UsuarioLogado)
+				continue
+			}
+			action, payload, usuarioTentado = autenticarPassageiro(cliente, reader)
+			deveEnviar = true
 		case "2":
 			action, payload, deveEnviar = buscarItinerarios(cliente, reader)
 		case "3":
 			action, payload, deveEnviar = reservarItinerario(cliente, reader)
 		case "4":
-			action, payload, deveEnviar = consultarReservas(cliente, reader) // Passando reader aqui também
+			action, payload, deveEnviar = consultarReservas(cliente, reader)
 		case "5":
 			action, payload, deveEnviar = cancelarReserva(cliente, reader)
 		case "6":
@@ -218,13 +202,19 @@ func main() {
 			continue
 		}
 
-		// Envia a requisição se a função capturou os dados com sucesso
 		if deveEnviar {
 			resp, err := cliente.EnviarRequisicao(action, payload)
 			if err != nil {
 				fmt.Printf("❌ Erro de comunicação: %v\n", err)
 			} else {
 				fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
+
+				// Atualiza o estado de login apenas se o servidor aceitar a autenticação
+				if action == "auth_user" && resp.Status == "SUCCESS" {
+					cliente.IsLogged = true
+					cliente.UsuarioLogado = usuarioTentado
+					fmt.Println("✅ Login efetuado com sucesso!")
+				}
 			}
 		}
 	}
