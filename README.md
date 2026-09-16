@@ -113,10 +113,15 @@ Horario de partida B→C > Horario de partida A→B
 
 ## 👩🏻‍💻Arquitetura 
 
-### 🖧 Componentes
+### 🖧 Conexão
   **Goroutine**: Interface de software pela qual um processo envia e recebe mensagens de e para a rede.(socket TCP)
   * É orientado a conexões ponto a ponto e full-duplex,onde cada socket de conexão ativa é identificado por uma tupla de **quatro elementos**: (*endereço IP de origem, porta de origem, endereço IP de destino, porta de destino*)
   * É criado um socket para cada cliente
+
+### ConcorrÊncia
+
+Lock / Unlock → trava exclusiva, pra escrita. Só uma goroutine por vez pode ter essa trava, e enquanto ela está travada, ninguém mais (nem leitor, nem escritor) consegue acessar.
+RLock / RUnlock → trava de leitura. Várias goroutines podem ter essa trava ao mesmo tempo, desde que ninguém esteja com a trava de escrita.
   
 
 Esqueleto da requisição:

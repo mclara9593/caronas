@@ -8,23 +8,28 @@ import (
 	"net"
 	"sync"
 
+	"github.com/mclara9593/caronas/internal/domain"
 	"github.com/mclara9593/caronas/internal/graph"
 	"github.com/mclara9593/caronas/internal/protocol"
 )
 
 // Server gerencia as conexões ativas e o estado compartilhado
 type Server struct {
-	grafo    *graph.Grafo
-	addr     string
-	listener net.Listener
-	mu       sync.Mutex
+	grafo           *graph.Grafo
+	repoPassageiros *domain.Repositorio
+	repoMotoristas  *domain.Repositorio
+	addr            string
+	listener        net.Listener
+	mu              sync.Mutex
 }
 
 // NovoServidor instancia o servidor TCP
 func NovoServidor(addr string) *Server {
 	return &Server{
-		addr:  addr,
-		grafo: graph.NovoGrafo(),
+		addr:            addr,
+		grafo:           graph.NovoGrafo(),
+		repoPassageiros: domain.NovoRepositorio(),
+		repoMotoristas:  domain.NovoRepositorio(),
 	}
 }
 
@@ -86,17 +91,27 @@ func (s *Server) tratarCliente(conn net.Conn) {
 func (s *Server) rotearRequisicao(conn net.Conn, req *protocol.Request) {
 	switch req.Action {
 
-	// --- AÇÕES DO MOTORISTA ---
+	// --- CADASTRO E LOGIN ---
+	case "cadastrar_user":
+		s.handleCadastrarUser(conn, req)
+	case "cadastrar_motorista":
+		s.handleCadastrarMotorista(conn, req)
+	case "auth_user":
+		s.handleAuthUser(conn, req)
 	case "auth_conductor":
 		s.handleAuthConductor(conn, req)
+
+	// --- AÇÕES DO PASSAGEIRO ---
+	case "get_my_rides":
+		s.handleGetMyRides(conn, req)
+
+	// --- AÇÕES DO MOTORISTA ---
 	case "publish_ride":
 		s.handlePublishRide(conn, req)
 	case "cancel_ride":
 		s.handleCancelRide(conn, req)
 
 	// --- AÇÕES DO PASSAGEIRO ---
-	case "auth_user":
-		s.handleAuthUser(conn, req)
 	case "search_route":
 		s.handleSearchRoute(conn, req)
 	case "book_ride":
@@ -112,18 +127,101 @@ func (s *Server) rotearRequisicao(conn net.Conn, req *protocol.Request) {
 }
 
 // ==========================
-// HANDLERS DO MOTORISTA
-// ===========================
+// CADASTRO E LOGIN
+// ==========================
 
-func (s *Server) handleAuthConductor(conn net.Conn, req *protocol.Request) {
-	var payload protocol.ConductorAuth
+// Cadastro de passageiro
+func (s *Server) handleCadastrarUser(conn net.Conn, req *protocol.Request) {
+	var payload protocol.CadastroPassageiro
 	if err := json.Unmarshal(req.Payload, &payload); err != nil {
-		s.enviarErro(conn, req.RequestID, "Payload de autenticação inválido")
+		s.enviarErro(conn, req.RequestID, "Payload de cadastro inválido")
 		return
 	}
 
-	s.enviarSucesso(conn, req.RequestID, "Motorista autenticado com sucesso!", nil)
+	if payload.Nome == "" || payload.Email == "" || payload.Senha == "" {
+		s.enviarErro(conn, req.RequestID, "Nome, email e senha são obrigatórios")
+		return
+	}
+
+	usuario := domain.Usuario{
+		Nome:  payload.Nome,
+		Email: payload.Email,
+		Senha: payload.Senha,
+	}
+
+	if !s.repoPassageiros.Cadastrar(usuario) {
+		s.enviarErro(conn, req.RequestID, "Já existe um passageiro cadastrado com este email")
+		return
+	}
+
+	s.enviarSucesso(conn, req.RequestID, "Passageiro cadastrado com sucesso! Faça login para continuar.", nil)
 }
+
+// Cadastro de motorista (mesmos dados do passageiro + CNH)
+func (s *Server) handleCadastrarMotorista(conn net.Conn, req *protocol.Request) {
+	var payload protocol.CadastroMotorista
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		s.enviarErro(conn, req.RequestID, "Payload de cadastro inválido")
+		return
+	}
+
+	if payload.Nome == "" || payload.Email == "" || payload.Senha == "" || payload.CNH == "" {
+		s.enviarErro(conn, req.RequestID, "Nome, email, CNH e senha são obrigatórios")
+		return
+	}
+
+	usuario := domain.Usuario{
+		Nome:  payload.Nome,
+		Email: payload.Email,
+		Senha: payload.Senha,
+		CNH:   payload.CNH,
+	}
+
+	if !s.repoMotoristas.Cadastrar(usuario) {
+		s.enviarErro(conn, req.RequestID, "Já existe um motorista cadastrado com este email")
+		return
+	}
+
+	s.enviarSucesso(conn, req.RequestID, "Motorista cadastrado com sucesso! Faça login para continuar.", nil)
+}
+
+// Login de passageiro
+func (s *Server) handleAuthUser(conn net.Conn, req *protocol.Request) {
+	var payload protocol.LoginRequest
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		s.enviarErro(conn, req.RequestID, "Payload de login inválido")
+		return
+	}
+
+	usuario, ok := s.repoPassageiros.ValidarLogin(payload.Email, payload.Senha)
+	if !ok {
+		s.enviarErro(conn, req.RequestID, "Email ou senha inválidos")
+		return
+	}
+
+	s.enviarSucesso(conn, req.RequestID, "Passageiro autenticado com sucesso!", protocol.LoginResult{Nome: usuario.Nome})
+}
+
+// Login de motorista
+func (s *Server) handleAuthConductor(conn net.Conn, req *protocol.Request) {
+	var payload protocol.LoginRequest
+	if err := json.Unmarshal(req.Payload, &payload); err != nil {
+		s.enviarErro(conn, req.RequestID, "Payload de login inválido")
+		return
+	}
+
+	usuario, ok := s.repoMotoristas.ValidarLogin(payload.Email, payload.Senha)
+	if !ok {
+		s.enviarErro(conn, req.RequestID, "Email ou senha inválidos")
+		return
+	}
+
+	s.enviarSucesso(conn, req.RequestID, "Motorista autenticado com sucesso!", protocol.LoginResult{Nome: usuario.Nome})
+}
+
+// ==========================
+// HANDLERS DO MOTORISTA
+// ===========================
 
 // PUBLICAR CARONA
 func (s *Server) handlePublishRide(conn net.Conn, req *protocol.Request) {
@@ -160,20 +258,20 @@ func (s *Server) handleCancelRide(conn net.Conn, req *protocol.Request) {
 	s.enviarSucesso(conn, req.RequestID, "Carona removida do Grafo com sucesso!", nil)
 }
 
-// ==========================================
-// HANDLERS DO PASSAGEIRO
-// ==========================================
-
-func (s *Server) handleAuthUser(conn net.Conn, req *protocol.Request) {
-	var payload protocol.UserAuth
+func (s *Server) handleGetMyRides(conn net.Conn, req *protocol.Request) {
+	var payload protocol.GetID
 	if err := json.Unmarshal(req.Payload, &payload); err != nil {
 		s.enviarErro(conn, req.RequestID, "Payload inválido")
 		return
 	}
-
-	// TODO: Validar dados do cliente no Storage em memória
-	s.enviarSucesso(conn, req.RequestID, "Passageiro autenticado com sucesso!", nil)
+	// Remove a carona e desfaz as arestas no Grafo
+	s.grafo.GetRideById(payload.RideID)
+	s.enviarSucesso(conn, req.RequestID, "Carona removida do Grafo com sucesso!", nil)
 }
+
+// ==========================================
+// HANDLERS DO PASSAGEIRO
+// ==========================================
 
 // Buscar rota de viagem
 func (s *Server) handleSearchRoute(conn net.Conn, req *protocol.Request) {
@@ -211,7 +309,7 @@ func (s *Server) handleBookRide(conn net.Conn, req *protocol.Request) {
 }
 
 func (s *Server) handleGetBookings(conn net.Conn, req *protocol.Request) {
-	// TODO: Retornar histórico do passageiro
+
 	s.enviarSucesso(conn, req.RequestID, "Reservas encontradas", nil)
 }
 

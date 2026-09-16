@@ -17,21 +17,41 @@ type Response struct {
 	Payload   json.RawMessage `json:"payload"`    // Opcional: dados de retorno (ex: lista de caronas)
 }
 
-type ConductorSingin struct {
-	Login    []string `json:"login"`
-	Password string   `json:"password"`
-	CNH      int      `json:"cnh"`
+// ============================
+// CADASTRO E LOGIN
+// ============================
+
+// CadastroPassageiro é o payload enviado para criar uma conta de passageiro
+type CadastroPassageiro struct {
+	Nome  string `json:"nome"`
+	Email string `json:"email"`
+	Senha string `json:"senha"`
 }
 
-type ConductorAuth struct {
-	Login    []string `json:"login"`
-	Password string   `json:"password"`
+// CadastroMotorista é o payload enviado para criar uma conta de motorista.
+// É igual ao de passageiro, acrescido apenas da CNH.
+type CadastroMotorista struct {
+	Nome  string `json:"nome"`
+	Email string `json:"email"`
+	Senha string `json:"senha"`
+	CNH   string `json:"cnh"`
 }
 
-type UserAuth struct {
-	Login    []string `json:"login"`
-	Password string   `json:"password"`
+// LoginRequest é usado tanto por passageiros quanto por motoristas para autenticar
+type LoginRequest struct {
+	Email string `json:"email"`
+	Senha string `json:"senha"`
 }
+
+// LoginResult é devolvido pelo servidor dentro do Payload da Response quando o login dá certo,
+// para que o cliente saiba o nome de quem acabou de logar
+type LoginResult struct {
+	Nome string `json:"nome"`
+}
+
+// ============================
+// CARONAS / RESERVAS
+// ============================
 
 type PushRide struct {
 	Route           []string `json:"route"`
@@ -53,8 +73,7 @@ type SearchRoute struct {
 	ArrivalTime string `json:"arrival_time"`
 }
 
-
-// Reserva,Consulta de reserva,e cancelamento por usuário
+// Reserva, Consulta de reserva, e cancelamento por usuário
 type GetID struct {
 	RideID string `json:"ride_id"`
 }

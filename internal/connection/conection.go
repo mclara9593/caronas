@@ -11,7 +11,7 @@ import (
 )
 
 // função para conectar ao servidor com tentativas limitadas
-func conectarAoServidor(endereco string, maxTentativas int) (net.Conn, error) {
+func ConectarAoServidor(endereco string, maxTentativas int) (net.Conn, error) {
 	var conn net.Conn
 	var err error
 
@@ -36,10 +36,11 @@ type Cliente struct {
 	Conn          net.Conn
 	Reader        *bufio.Reader
 	IsLogged      bool
-	UsuarioLogado string
+	UsuarioLogado string // email de quem está logado
+	NomeLogado    string // nome de quem está logado (vem do servidor no login)
 }
 
-func newCliente(nome string, conn net.Conn) *Cliente {
+func NewCliente(nome string, conn net.Conn) *Cliente {
 	return &Cliente{
 		Nome:     nome,
 		Conn:     conn,

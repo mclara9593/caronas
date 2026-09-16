@@ -2,88 +2,16 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"strings"
-	"time"
 
+	"github.com/mclara9593/caronas/cmd/client/auth"
+	"github.com/mclara9593/caronas/internal/connection"
 	"github.com/mclara9593/caronas/internal/protocol"
 )
 
-func conectarAoServidor(endereco string, maxTentativas int) (net.Conn, error) {
-	var conn net.Conn
-	var err error
-
-	for i := 1; i <= maxTentativas; i++ {
-		fmt.Printf("🔌 Tentando conectar ao Servidor Central (%d/%d)...\n", i, maxTentativas)
-
-		conn, err = net.DialTimeout("tcp", endereco, 3*time.Second)
-		if err == nil {
-			return conn, nil
-		}
-
-		fmt.Printf("⚠️ Falha na conexão: %v. Tentando novamente em 2 segundos...\n", err)
-		time.Sleep(2 * time.Second)
-	}
-
-	return nil, err
-}
-
-type Cliente struct {
-	Nome   string
-	Conn   net.Conn
-	Reader *bufio.Reader
-}
-
-func newCliente(nome string, conn net.Conn) *Cliente {
-	return &Cliente{
-		Nome:   nome,
-		Conn:   conn,
-		Reader: bufio.NewReader(conn),
-	}
-}
-
-func (c *Cliente) EnviarRequisicao(action string, payload interface{}) (*protocol.Response, error) {
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao serializar payload: %v", err)
-	}
-
-	req := protocol.Request{
-		Action:    action,
-		RequestID: fmt.Sprintf("req-%d", time.Now().UnixNano()),
-		Payload:   payloadBytes,
-	}
-
-	reqBytes, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao serializar requisição: %v", err)
-	}
-
-	_, err = c.Conn.Write(append(reqBytes, '\n'))
-	if err != nil {
-		return nil, fmt.Errorf("erro ao enviar dados pelo socket: %v", err)
-	}
-
-	respostaBytes, err := c.Reader.ReadBytes('\n')
-	if err != nil {
-		return nil, fmt.Errorf("erro ao ler resposta do servidor: %v", err)
-	}
-
-	var resp protocol.Response
-	err = json.Unmarshal(respostaBytes, &resp)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao decodificar resposta JSON: %v", err)
-	}
-
-	return &resp, nil
-}
-
-// -----------------------------------------------------------------------------------------------
-
-func buscarItinerarios(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
+func buscarItinerarios(cliente *connection.Cliente, reader *bufio.Reader) {
 	fmt.Print("Cidade de Origem: ")
 	origem, _ := reader.ReadString('\n')
 	origem = strings.TrimSpace(origem)
@@ -102,120 +30,120 @@ func buscarItinerarios(cliente *Cliente, reader *bufio.Reader) (string, interfac
 		ArrivalTime: data,
 	}
 
-	return "search_route", payload, true
+	resp, err := cliente.EnviarRequisicao("search_route", payload)
+	if err != nil {
+		fmt.Printf("❌ Erro de comunicação: %v\n", err)
+		return
+	}
+
+	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
+	if len(resp.Payload) > 0 {
+		fmt.Println(string(resp.Payload))
+	}
 }
 
-func reservarItinerario(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
+func reservarItinerario(cliente *connection.Cliente, reader *bufio.Reader) {
 	fmt.Print("Digite o ID do itinerário/ride para reservar: ")
 	idRide, _ := reader.ReadString('\n')
 	idRide = strings.TrimSpace(idRide)
 
-	payload := protocol.GetID{
-		RideID: idRide,
+	payload := protocol.GetID{RideID: idRide}
+
+	resp, err := cliente.EnviarRequisicao("book_ride", payload)
+	if err != nil {
+		fmt.Printf("❌ Erro de comunicação: %v\n", err)
+		return
 	}
 
-	return "book_ride", payload, true
+	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
 }
 
-func consultarReservas(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
-	payload := protocol.GetID{
-		//
+func consultarReservas(cliente *connection.Cliente) {
+	resp, err := cliente.EnviarRequisicao("get_bookings", protocol.GetID{})
+	if err != nil {
+		fmt.Printf("❌ Erro de comunicação: %v\n", err)
+		return
 	}
 
-	return "get_bookings", payload, true
+	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
 }
 
-func cancelarReserva(cliente *Cliente, reader *bufio.Reader) (string, interface{}, bool) {
+func cancelarReserva(cliente *connection.Cliente, reader *bufio.Reader) {
 	fmt.Print("ID da Reserva: ")
 	idReserva, _ := reader.ReadString('\n')
 	idReserva = strings.TrimSpace(idReserva)
 
-	payload := protocol.GetID{
-		RideID: idReserva,
+	payload := protocol.GetID{RideID: idReserva}
+
+	resp, err := cliente.EnviarRequisicao("cancel_booking", payload)
+	if err != nil {
+		fmt.Printf("❌ Erro de comunicação: %v\n", err)
+		return
 	}
 
-	return "cancel_booking", payload, true
+	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
 }
 
-// -----------------------------------------------------------------------------------------------
-
 func main() {
-	conn, err := conectarAoServidor("localhost:9593", 5)
+	conn, err := connection.ConectarAoServidor("localhost:9593", 5)
 	if err != nil {
 		fmt.Printf("Erro ao conectar: %v\n", err)
 		os.Exit(1)
 	}
 	defer conn.Close()
 
-	cliente := newCliente("Passageiro", conn)
+	cliente := connection.NewCliente("Passageiro", conn)
 	fmt.Println("✔ Conectado com sucesso ao Servidor Central do VaiJunto!")
 
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		fmt.Println("\n--- VAIJUNTO: PAINEL DO USUÁRIO ---")
-		fmt.Println("1. Cadastrado (1º acesso) ")
+		fmt.Println("\n--- VAIJUNTO: PAINEL DO PASSAGEIRO ---")
+		fmt.Println("1. Cadastrar (1º acesso)")
 		fmt.Println("2. Login")
-
-		fmt.Println("2. Buscar Itinerários de Carona")
-		fmt.Println("3. Reservar Itinerário")
-		fmt.Println("4. Consultar Minhas Reservas")
-		fmt.Println("5. Cancelar Reserva")
-		fmt.Println("6. Sair")
+		fmt.Println("3. Buscar Itinerários de Carona")
+		fmt.Println("4. Reservar Itinerário")
+		fmt.Println("5. Consultar Minhas Reservas")
+		fmt.Println("6. Cancelar Reserva")
+		fmt.Println("7. Sair")
 		fmt.Print("Escolha uma opção: ")
 
 		opcao, _ := reader.ReadString('\n')
 		opcao = strings.TrimSpace(opcao)
 
-		// Barreira de Autenticação: Impede acesso às rotas 2, 3, 4 e 5 sem login
-		//if !cliente.IsLogged && (opcao == "2" || opcao == "3" || opcao == "4" || opcao == "5") {
-		//	fmt.Println("\n Acesso negado! Você precisa fazer login (Opção 1) antes de realizar ações.")
-		continue
-		//}
-
-		//var action string
-		var payload interface{}
-		var deveEnviar bool
-		var usuarioTentado string
+		// Barreira de Autenticação: opções 3 a 6 exigem login
+		precisaLogin := opcao == "3" || opcao == "4" || opcao == "5" || opcao == "6"
+		if precisaLogin && !cliente.IsLogged {
+			fmt.Println("\n🔒 Acesso negado! Você precisa fazer login (Opção 2) antes de realizar ações.")
+			continue
+		}
 
 		switch opcao {
 		case "1":
 			if cliente.IsLogged {
-				fmt.Printf("Você já está logado como %s!\n", cliente.UsuarioLogado)
+				fmt.Printf("Você já está logado como %s!\n", cliente.NomeLogado)
 				continue
 			}
-			action, payload, usuarioTentado = autenticarPassageiro(cliente, reader)
-			deveEnviar = true
+			auth.CadastrarPassageiro(cliente, reader)
 		case "2":
-			action, payload, deveEnviar = buscarItinerarios(cliente, reader)
+			if cliente.IsLogged {
+				fmt.Printf("Você já está logado como %s!\n", cliente.NomeLogado)
+				continue
+			}
+			auth.LoginPassageiro(cliente, reader)
 		case "3":
-			action, payload, deveEnviar = reservarItinerario(cliente, reader)
+			buscarItinerarios(cliente, reader)
 		case "4":
-			action, payload, deveEnviar = consultarReservas(cliente, reader)
+			reservarItinerario(cliente, reader)
 		case "5":
-			action, payload, deveEnviar = cancelarReserva(cliente, reader)
+			consultarReservas(cliente)
 		case "6":
+			cancelarReserva(cliente, reader)
+		case "7":
 			fmt.Println("Encerrando conexão...")
 			return
 		default:
 			fmt.Println("Opção inválida.")
-			continue
-		}
-
-		if deveEnviar {
-			resp, err := cliente.EnviarRequisicao(action, payload)
-			if err != nil {
-				fmt.Printf("❌ Erro de comunicação: %v\n", err)
-			} else {
-				fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
-
-				// Atualiza o estado de login apenas se o servidor aceitar a autenticação
-				if action == "auth_user" && resp.Status == "SUCCESS" {
-					cliente.IsLogged = true
-					cliente.UsuarioLogado = usuarioTentado
-					fmt.Println("✅ Login efetuado com sucesso!")
-				}
-			}
 		}
 	}
 }

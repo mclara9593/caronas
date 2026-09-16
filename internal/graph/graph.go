@@ -134,6 +134,17 @@ func (g *Grafo) SearchRoute(origem, destino string) []Ride {
 	return resultados
 }
 
+func (g *Grafo) GetRideById(idRide string) (Ride, bool) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	ride, existe := g.Rides[idRide]
+	if !existe {
+		return Ride{}, false
+	}
+	return ride, true
+}
+
 // RemoveRide cancela a carona informada e limpa as arestas do Grafo
 func (g *Grafo) RemoveRide(idRide string) {
 	g.mu.Lock()
