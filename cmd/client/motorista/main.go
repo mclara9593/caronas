@@ -101,7 +101,6 @@ func publicarCarona(cliente *connection.Cliente, reader *bufio.Reader) {
 		fmt.Printf("Erro ao publicar carona: %v\n", err)
 		return
 	}
-	fmt.Printf("DEBUG payload.Precos enviado: %#v\n", payload.Precos)
 
 	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
 

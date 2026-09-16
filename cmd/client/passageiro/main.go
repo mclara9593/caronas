@@ -39,8 +39,31 @@ func buscarItinerarios(cliente *connection.Cliente, reader *bufio.Reader) {
 	}
 
 	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
-	if len(resp.Payload) > 0 {
-		fmt.Println(string(resp.Payload))
+
+	if resp.Status != "SUCCESS" || len(resp.Payload) == 0 {
+		return
+	}
+
+	var itinerarios []protocol.RideInfo
+	if err := json.Unmarshal(resp.Payload, &itinerarios); err != nil {
+		fmt.Printf("Erro ao interpretar a resposta: %v\n", err)
+		return
+	}
+
+	if len(itinerarios) == 0 {
+		fmt.Println("Nenhum itinerário encontrado para essa rota.")
+		return
+	}
+
+	for i, itin := range itinerarios {
+		fmt.Printf("\nItinerário %d:\n", i+1)
+		fmt.Printf("  ID da rota: %s\n", itin.IdRide)
+		for _, trecho := range itin.Sections {
+			fmt.Printf("  Saída: %s\n", trecho.Origem)
+			fmt.Printf("  Destino: %s\n", trecho.Destino)
+			fmt.Printf("  Quantidade de assentos: %d\n", trecho.Assentos)
+		}
+		fmt.Printf("  Valor total da carona: R$ %.2f\n", itin.TotalPrice)
 	}
 }
 

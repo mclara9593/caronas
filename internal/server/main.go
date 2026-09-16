@@ -321,15 +321,16 @@ func (s *Server) handleBookRide(conn net.Conn, req *protocol.Request) {
 		return
 	}
 
-	// Tenta decrementar 1 assento de forma atômica
-	// O RideID aqui pode ser o ID de um trecho ou uma lista de trechos do itinerário
-	sucesso := s.grafo.AdjustSeats([]string{payload.RideID}, -1)
+	// payload.RideID pode ser o id de uma rota inteira (com vários trechos)
+	// ou o id de um único trecho — ResolveItinerary trata os dois casos.
+	sectionIDs := s.grafo.ResolveItinerary(payload.RideID)
+
+	sucesso := s.grafo.AdjustSeats(sectionIDs, -1)
 	if !sucesso {
 		s.enviarErro(conn, req.RequestID, "Não há assentos disponíveis para esta reserva.")
 		return
 	}
 
-	// Devolve o ID reservado para o passageiro guardar (usado depois em cancel_booking)
 	s.enviarSucesso(conn, req.RequestID, "Reserva confirmada com sucesso!", protocol.BookRideResult{
 		RideID: payload.RideID,
 	})
@@ -347,8 +348,8 @@ func (s *Server) handleCancelBooking(conn net.Conn, req *protocol.Request) {
 		return
 	}
 
-	// Incrementa a vaga de volta ao Grafo (+1 assento)
-	s.grafo.AdjustSeats([]string{payload.RideID}, 1)
+	sectionIDs := s.grafo.ResolveItinerary(payload.RideID)
+	s.grafo.AdjustSeats(sectionIDs, 1)
 	s.enviarSucesso(conn, req.RequestID, "Reserva cancelada e vaga liberada!", nil)
 }
 

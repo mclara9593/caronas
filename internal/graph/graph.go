@@ -23,15 +23,18 @@ type Ride struct {
 
 // Grafo representa a rede de viagens e trechos
 type Grafo struct {
-	mu    sync.RWMutex
-	Nodes map[string][]Section // Origem -> Lista de trechos saindo da cidade
-	Rides map[string]Ride      // IdRide -> Objeto da Carona
+	mu          sync.RWMutex
+	Nodes       map[string][]Section
+	Rides       map[string]Ride
+	Itineraries map[string][]string // id da rota -> lista de ids de trecho que ela engloba
+	itinSeq     int
 }
 
 func NovoGrafo() *Grafo {
 	return &Grafo{
-		Nodes: make(map[string][]Section),
-		Rides: make(map[string]Ride),
+		Nodes:       make(map[string][]Section),
+		Rides:       make(map[string]Ride),
+		Itineraries: make(map[string][]string),
 	}
 }
 
@@ -81,9 +84,9 @@ func (g *Grafo) AddRide(idRide string, route []string, seats int, precos []float
 }
 
 // SearchRoute faz a busca BFS e retorna as opções de viagens (Rides) encontradas
+
 func (g *Grafo) SearchRoute(origem, destino string) []Ride {
 	g.mu.RLock()
-	defer g.mu.RUnlock()
 
 	var resultados []Ride
 
@@ -111,9 +114,7 @@ func (g *Grafo) SearchRoute(origem, destino string) []Ride {
 				total += sec.Preco
 			}
 
-			// Monta uma Ride combinada para o passageiro
 			resultados = append(resultados, Ride{
-				IdRide:     "search-result",
 				Sections:   curr.Caminho,
 				IdDriver:   "multi",
 				TotalPrice: total,
@@ -141,7 +142,48 @@ func (g *Grafo) SearchRoute(origem, destino string) []Ride {
 		}
 	}
 
+	g.mu.RUnlock()
+
+	// Registra cada itinerário encontrado com um ID único, guardando a lista
+	// de trechos que ele engloba — assim o passageiro só precisa informar
+	// esse ID e o servidor resolve todos os trechos por trás dele.
+	g.mu.Lock()
+	for i := range resultados {
+		resultados[i].IdRide = g.registrarItinerario(resultados[i].Sections)
+	}
+	g.mu.Unlock()
+
 	return resultados
+}
+
+// registrarItinerario cria um ID único para uma combinação de trechos (uma rota
+// encontrada pela busca) e guarda o mapeamento id -> lista de ids de trecho.
+// Pressupõe que o chamador já está segurando o Lock de escrita.
+func (g *Grafo) registrarItinerario(sections []Section) string {
+	g.itinSeq++
+	id := fmt.Sprintf("rota-%d", g.itinSeq)
+
+	ids := make([]string, len(sections))
+	for i, sec := range sections {
+		ids[i] = sec.IdSection
+	}
+	g.Itineraries[id] = ids
+
+	return id
+}
+
+// ResolveItinerary traduz um ID de rota (gerado pela busca) na lista de ids de
+// trecho que ela contém. Se o ID não for um itinerário registrado (ex: quando
+// o motorista informa direto o id de um único trecho), assume que é o próprio
+// id de um trecho isolado.
+func (g *Grafo) ResolveItinerary(id string) []string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	if secoes, existe := g.Itineraries[id]; existe {
+		return secoes
+	}
+	return []string{id}
 }
 
 // RidesByDriver retorna todas as caronas publicadas por um motorista específico (filtra pelo IdDriver)
