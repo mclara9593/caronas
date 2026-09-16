@@ -134,15 +134,18 @@ func (g *Grafo) SearchRoute(origem, destino string) []Ride {
 	return resultados
 }
 
-func (g *Grafo) GetRideById(idRide string) (Ride, bool) {
+// RidesByDriver retorna todas as caronas publicadas por um motorista específico (filtra pelo IdDriver)
+func (g *Grafo) RidesByDriver(idDriver string) []Ride {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
-	ride, existe := g.Rides[idRide]
-	if !existe {
-		return Ride{}, false
+	var resultado []Ride
+	for _, ride := range g.Rides {
+		if ride.IdDriver == idDriver {
+			resultado = append(resultado, ride)
+		}
 	}
-	return ride, true
+	return resultado
 }
 
 // RemoveRide cancela a carona informada e limpa as arestas do Grafo

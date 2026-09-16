@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -56,6 +57,15 @@ func reservarItinerario(cliente *connection.Cliente, reader *bufio.Reader) {
 	}
 
 	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
+
+	// Se deu certo, o servidor manda o ID da reserva dentro do Payload.
+	// (o "null" != len(...) é pra evitar imprimir ID vazio se o payload vier nulo)
+	if resp.Status == "SUCCESS" && len(resp.Payload) > 0 && string(resp.Payload) != "null" {
+		var resultado protocol.BookRideResult
+		if err := json.Unmarshal(resp.Payload, &resultado); err == nil && resultado.RideID != "" {
+			fmt.Printf("🎫 Reserva confirmada! ID: %s (guarde esse ID para cancelar depois)\n", resultado.RideID)
+		}
+	}
 }
 
 func consultarReservas(cliente *connection.Cliente) {

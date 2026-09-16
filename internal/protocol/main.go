@@ -58,6 +58,41 @@ type PushRide struct {
 	DepartureTime   string   `json:"departure_time"`
 	Capacity        int      `json:"available_seats"`
 	PricePerSegment float64  `json:"price_per_segment"`
+	DriverEmail     string   `json:"driver_email"` // email do motorista logado que está publicando
+}
+
+// GetMyRidesRequest é usado pelo motorista pra consultar as caronas que ele mesmo publicou
+type GetMyRidesRequest struct {
+	Email string `json:"email"`
+}
+
+// SectionInfo / RideInfo espelham graph.Section / graph.Ride (mesmas tags JSON), usados nas
+// respostas de consulta, para o cliente não precisar importar o pacote internal/graph.
+type SectionInfo struct {
+	IdSection string  `json:"id"`
+	Origem    string  `json:"origem"`
+	Destino   string  `json:"destino"`
+	Assentos  int     `json:"assentos"`
+	Preco     float64 `json:"preco"`
+}
+
+type RideInfo struct {
+	IdRide     string        `json:"id"`
+	Sections   []SectionInfo `json:"Sections"`
+	IdDriver   string        `json:"id_driver"`
+	TotalPrice float64       `json:"total_price"`
+}
+
+// PublishRideResult é devolvido ao motorista assim que a carona é cadastrada no Grafo,
+// para que ele saiba qual ID usar depois pra cancelar ou consultar essa carona.
+type PublishRideResult struct {
+	RideID string `json:"ride_id"`
+}
+
+// BookRideResult é devolvido ao passageiro assim que a reserva é confirmada,
+// para que ele saiba qual ID usar depois pra cancelar essa reserva.
+type BookRideResult struct {
+	RideID string `json:"ride_id"`
 }
 
 // Cancelar e Consultar carona por motorista

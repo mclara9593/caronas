@@ -101,15 +101,13 @@ func (s *Server) rotearRequisicao(conn net.Conn, req *protocol.Request) {
 	case "auth_conductor":
 		s.handleAuthConductor(conn, req)
 
-	// --- AÇÕES DO PASSAGEIRO ---
-	case "get_my_rides":
-		s.handleGetMyRides(conn, req)
-
 	// --- AÇÕES DO MOTORISTA ---
 	case "publish_ride":
 		s.handlePublishRide(conn, req)
 	case "cancel_ride":
 		s.handleCancelRide(conn, req)
+	case "get_my_rides":
+		s.handleGetMyRides(conn, req)
 
 	// --- AÇÕES DO PASSAGEIRO ---
 	case "search_route":
@@ -240,10 +238,13 @@ func (s *Server) handlePublishRide(conn net.Conn, req *protocol.Request) {
 		payload.Route,
 		payload.Capacity,
 		payload.PricePerSegment,
-		"driver-default",
+		payload.DriverEmail,
 	)
 
-	s.enviarSucesso(conn, req.RequestID, "Carona publicada e inserida no Grafo!", nil)
+	// Devolve o ID gerado para o motorista guardar (usado depois em cancel_ride)
+	s.enviarSucesso(conn, req.RequestID, "Carona publicada e inserida no Grafo!", protocol.PublishRideResult{
+		RideID: rideID,
+	})
 }
 
 func (s *Server) handleCancelRide(conn net.Conn, req *protocol.Request) {
@@ -258,15 +259,23 @@ func (s *Server) handleCancelRide(conn net.Conn, req *protocol.Request) {
 	s.enviarSucesso(conn, req.RequestID, "Carona removida do Grafo com sucesso!", nil)
 }
 
+// Lista as caronas publicadas por um motorista específico
 func (s *Server) handleGetMyRides(conn net.Conn, req *protocol.Request) {
-	var payload protocol.GetID
+	var payload protocol.GetMyRidesRequest
 	if err := json.Unmarshal(req.Payload, &payload); err != nil {
 		s.enviarErro(conn, req.RequestID, "Payload inválido")
 		return
 	}
-	// Remove a carona e desfaz as arestas no Grafo
-	s.grafo.GetRideById(payload.RideID)
-	s.enviarSucesso(conn, req.RequestID, "Carona removida do Grafo com sucesso!", nil)
+
+	if payload.Email == "" {
+		s.enviarErro(conn, req.RequestID, "Email do motorista é obrigatório")
+		return
+	}
+
+	rides := s.grafo.RidesByDriver(payload.Email)
+
+	msg := fmt.Sprintf("%d carona(s) encontrada(s)", len(rides))
+	s.enviarSucesso(conn, req.RequestID, msg, rides)
 }
 
 // ==========================================
@@ -305,11 +314,14 @@ func (s *Server) handleBookRide(conn net.Conn, req *protocol.Request) {
 		return
 	}
 
-	s.enviarSucesso(conn, req.RequestID, "Reserva confirmada com sucesso!", nil)
+	// Devolve o ID reservado para o passageiro guardar (usado depois em cancel_booking)
+	s.enviarSucesso(conn, req.RequestID, "Reserva confirmada com sucesso!", protocol.BookRideResult{
+		RideID: payload.RideID,
+	})
 }
 
 func (s *Server) handleGetBookings(conn net.Conn, req *protocol.Request) {
-
+	// TODO: Retornar histórico do passageiro
 	s.enviarSucesso(conn, req.RequestID, "Reservas encontradas", nil)
 }
 

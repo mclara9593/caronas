@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -12,7 +13,7 @@ import (
 )
 
 func publicarCarona(cliente *connection.Cliente, reader *bufio.Reader) {
-	// Coleta a rota completa (ex: Feira de Santana, Salvador, Aracaju)
+	// 1. Coleta a rota completa (ex: Feira de Santana, Salvador, Aracaju)
 	fmt.Print("Digite as cidades da rota (separadas por vírgula): ")
 	rotaInput, _ := reader.ReadString('\n')
 	rotaInput = strings.TrimSpace(rotaInput)
@@ -47,12 +48,15 @@ func publicarCarona(cliente *connection.Cliente, reader *bufio.Reader) {
 	var preco float64
 	fmt.Scanln(&preco)
 
-	// Monta o payload conforme a struct PushRide
+	// Monta o payload conforme a struct PushRide.
+	// DriverEmail é o email de quem está logado — é isso que permite depois
+	// filtrar "minhas caronas" corretamente.
 	payload := protocol.PushRide{
 		Route:           rota,
 		DepartureTime:   depTime,
 		Capacity:        vagas,
 		PricePerSegment: preco,
+		DriverEmail:     cliente.UsuarioLogado,
 	}
 
 	// Envia a requisição via socket
@@ -63,17 +67,51 @@ func publicarCarona(cliente *connection.Cliente, reader *bufio.Reader) {
 	}
 
 	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
+
+	// Se deu certo, o servidor manda o ID da carona dentro do Payload.
+	// Repara no "null": se o payload vier vazio, o JSON manda literalmente a palavra
+	// null (4 bytes) em vez de nada — por isso não basta checar len(resp.Payload) > 0.
+	if resp.Status == "SUCCESS" && len(resp.Payload) > 0 && string(resp.Payload) != "null" {
+		var resultado protocol.PublishRideResult
+		if err := json.Unmarshal(resp.Payload, &resultado); err == nil && resultado.RideID != "" {
+			fmt.Printf("🚗 ID da carona: %s (guarde esse ID para cancelar depois)\n", resultado.RideID)
+		}
+	}
 }
 
-func consultarCaronas(cliente *connection.Cliente, reader *bufio.Reader) {
-	fmt.Println("Consultando caronas ativas do motorista...")
-	resp, err := cliente.EnviarRequisicao("get_my_rides", protocol.GetID{})
+func consultarCaronas(cliente *connection.Cliente) {
+	resp, err := cliente.EnviarRequisicao("get_my_rides", protocol.GetMyRidesRequest{
+		Email: cliente.UsuarioLogado,
+	})
 	if err != nil {
 		fmt.Printf("Erro ao consultar caronas: %v\n", err)
 		return
 	}
 
 	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
+
+	if resp.Status != "SUCCESS" || len(resp.Payload) == 0 {
+		return
+	}
+
+	var caronas []protocol.RideInfo
+	if err := json.Unmarshal(resp.Payload, &caronas); err != nil {
+		fmt.Printf("Erro ao interpretar a resposta: %v\n", err)
+		return
+	}
+
+	if len(caronas) == 0 {
+		fmt.Println("Você ainda não publicou nenhuma carona.")
+		return
+	}
+
+	for _, carona := range caronas {
+		fmt.Printf("\n🚗 Carona %s — total R$ %.2f\n", carona.IdRide, carona.TotalPrice)
+		for _, trecho := range carona.Sections {
+			fmt.Printf("   %s → %s | %d vaga(s) | R$ %.2f | id: %s\n",
+				trecho.Origem, trecho.Destino, trecho.Assentos, trecho.Preco, trecho.IdSection)
+		}
+	}
 }
 
 func cancelarCarona(cliente *connection.Cliente, reader *bufio.Reader) {
@@ -142,7 +180,7 @@ func main() {
 		case "3":
 			publicarCarona(cliente, reader)
 		case "4":
-			consultarCaronas(cliente, reader)
+			consultarCaronas(cliente)
 		case "5":
 			cancelarCarona(cliente, reader)
 		case "6":
