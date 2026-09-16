@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -95,15 +96,18 @@ func cancelarReserva(cliente *connection.Cliente, reader *bufio.Reader) {
 }
 
 func main() {
-	conn, err := connection.ConectarAoServidor("localhost:9593", 5)
+	endereco := flag.String("addr", "localhost:9593", "Endereço do Servidor Central (ip:porta)")
+	flag.Parse()
+
+	conn, err := connection.ConectarAoServidor(*endereco, 5)
 	if err != nil {
-		fmt.Printf("Erro ao conectar: %v\n", err)
+		fmt.Printf(" Erro ao conectar: %v\n", err)
 		os.Exit(1)
 	}
 	defer conn.Close()
 
-	cliente := connection.NewCliente("Passageiro", conn)
-	fmt.Println("✔ Conectado com sucesso ao Servidor Central do VaiJunto!")
+	cliente := connection.NewCliente("Motorista", conn)
+	fmt.Printf("Conectado com sucesso ao Servidor Central do VaiJunto em %s!\n", *endereco)
 
 	reader := bufio.NewReader(os.Stdin)
 

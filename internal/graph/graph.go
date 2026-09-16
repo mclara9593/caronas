@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -37,7 +38,13 @@ func NovoGrafo() *Grafo {
 //==============================MANIPULAÇÃO DE CARONAS E TRECHOS======================================
 
 // Quebra a rota do motorista em trechos e insere no Grafo
-func (g *Grafo) AddRide(idRide string, route []string, seats int, price float64, idDriver string) {
+// AddRide agora recebe um preço por trecho (precos[i] corresponde ao trecho route[i] -> route[i+1]),
+// em vez de um preço único aplicado a toda a rota.
+func (g *Grafo) AddRide(idRide string, route []string, seats int, precos []float64, idDriver string) error {
+	if len(precos) != len(route)-1 {
+		return fmt.Errorf("esperava %d preço(s) para %d trecho(s), recebeu %d", len(route)-1, len(route)-1, len(precos))
+	}
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -48,17 +55,18 @@ func (g *Grafo) AddRide(idRide string, route []string, seats int, price float64,
 		origem := route[i]
 		destino := route[i+1]
 		secID := idRide + "-sec-" + origem + "-" + destino
+		preco := precos[i]
 
 		sec := Section{
 			IdSection: secID,
 			Origem:    origem,
 			Destino:   destino,
 			Assentos:  seats,
-			Preco:     price,
+			Preco:     preco,
 		}
 
 		rideSections = append(rideSections, sec)
-		totalPrice += price
+		totalPrice += sec.Preco
 		g.Nodes[origem] = append(g.Nodes[origem], sec)
 	}
 
@@ -68,6 +76,8 @@ func (g *Grafo) AddRide(idRide string, route []string, seats int, price float64,
 		IdDriver:   idDriver,
 		TotalPrice: totalPrice,
 	}
+
+	return nil
 }
 
 // SearchRoute faz a busca BFS e retorna as opções de viagens (Rides) encontradas

@@ -229,17 +229,33 @@ func (s *Server) handlePublishRide(conn net.Conn, req *protocol.Request) {
 		return
 	}
 
+	if len(payload.Route) < 2 {
+		s.enviarErro(conn, req.RequestID, "A rota precisa ter pelo menos 2 cidades")
+		return
+	}
+
+	if len(payload.Precos) != len(payload.Route)-1 {
+		s.enviarErro(conn, req.RequestID, fmt.Sprintf(
+			"Rota com %d trecho(s) precisa de %d preço(s), mas veio %d",
+			len(payload.Route)-1, len(payload.Route)-1, len(payload.Precos),
+		))
+		return
+	}
+
 	// Gera um ID único para a carona/ride
 	rideID := "ride-" + req.RequestID
 
 	// Chama o Grafo passando os dados extraídos do payload
-	s.grafo.AddRide(
+	if err := s.grafo.AddRide(
 		rideID,
 		payload.Route,
 		payload.Capacity,
-		payload.PricePerSegment,
+		payload.Precos,
 		payload.DriverEmail,
-	)
+	); err != nil {
+		s.enviarErro(conn, req.RequestID, err.Error())
+		return
+	}
 
 	// Devolve o ID gerado para o motorista guardar (usado depois em cancel_ride)
 	s.enviarSucesso(conn, req.RequestID, "Carona publicada e inserida no Grafo!", protocol.PublishRideResult{
@@ -293,9 +309,8 @@ func (s *Server) handleSearchRoute(conn net.Conn, req *protocol.Request) {
 	// Executa a busca em largura no Grafo
 	resultados := s.grafo.SearchRoute(payload.Source, payload.Destination)
 
-	// Converte os resultados para JSON antes de devolver ao cliente
-	data, _ := json.Marshal(resultados)
-	s.enviarSucesso(conn, req.RequestID, "Itinerários encontrados", data)
+	// Passa a struct direto — enviarSucesso já faz o Marshal internamente
+	s.enviarSucesso(conn, req.RequestID, "Itinerários encontrados", resultados)
 }
 
 // Efetuar reserva

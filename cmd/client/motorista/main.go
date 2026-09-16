@@ -3,8 +3,10 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/mclara9593/caronas/cmd/client/auth"
@@ -13,24 +15,52 @@ import (
 )
 
 func publicarCarona(cliente *connection.Cliente, reader *bufio.Reader) {
-	// 1. Coleta a rota completa (ex: Feira de Santana, Salvador, Aracaju)
-	fmt.Print("Digite as cidades da rota (separadas por vírgula): ")
-	rotaInput, _ := reader.ReadString('\n')
-	rotaInput = strings.TrimSpace(rotaInput)
-
-	// Converte a string em um slice []string
-	cidadesRaw := strings.Split(rotaInput, ",")
+	// 1. Coleta a rota completa (ex: Feira de Santana, Salvador, Aracaju),
+	// repetindo a pergunta até o motorista informar pelo menos 2 cidades.
 	var rota []string
-	for _, c := range cidadesRaw {
-		cidadeTratada := strings.TrimSpace(c)
-		if cidadeTratada != "" {
-			rota = append(rota, cidadeTratada)
+	for {
+		fmt.Print("Digite as cidades da rota (separadas por vírgula): ")
+		rotaInput, _ := reader.ReadString('\n')
+		rotaInput = strings.TrimSpace(rotaInput)
+
+		cidadesRaw := strings.Split(rotaInput, ",")
+		rota = nil
+		for _, c := range cidadesRaw {
+			cidadeTratada := strings.TrimSpace(c)
+			if cidadeTratada != "" {
+				rota = append(rota, cidadeTratada)
+			}
 		}
+
+		if len(rota) < 2 {
+			fmt.Println(" A rota precisa ter pelo menos 2 cidades (origem e destino).")
+			continue
+		}
+		break
 	}
 
-	if len(rota) < 2 {
-		fmt.Println(" A rota precisa ter pelo menos 2 cidades (origem e destino).")
-		return
+	// Quebra a rota em trechos de 2 em 2 (origem -> destino) e pede um preço
+	// individual para cada um, em vez de um preço único pra rota inteira.
+	precos := make([]float64, len(rota)-1)
+	fmt.Println("\nAgora informe o preço de cada trecho:")
+	for i := 0; i < len(rota)-1; i++ {
+		origem := rota[i]
+		destino := rota[i+1]
+
+		for {
+			fmt.Printf("Trecho %d: %s → %s | Preço (R$): ", i+1, origem, destino)
+			precoInput, _ := reader.ReadString('\n')
+			precoInput = strings.TrimSpace(precoInput)
+			precoInput = strings.Replace(precoInput, ",", ".", 1) // aceita vírgula como separador decimal
+
+			valor, err := strconv.ParseFloat(precoInput, 64)
+			if err != nil || valor <= 0 {
+				fmt.Println(" Digite um valor numérico maior que zero (ex: 25.50).")
+				continue
+			}
+			precos[i] = valor
+			break
+		}
 	}
 
 	// Coleta a data/horário de partida
@@ -38,25 +68,31 @@ func publicarCarona(cliente *connection.Cliente, reader *bufio.Reader) {
 	depTime, _ := reader.ReadString('\n')
 	depTime = strings.TrimSpace(depTime)
 
-	// Coleta a capacidade de assentos
-	fmt.Print("Quantidade de vagas disponíveis: ")
+	// Coleta a capacidade de assentos (mesmo reader usado acima, sem misturar com Scanln)
 	var vagas int
-	fmt.Scanln(&vagas)
+	for {
+		fmt.Print("Quantidade de vagas disponíveis: ")
+		vagasInput, _ := reader.ReadString('\n')
+		vagasInput = strings.TrimSpace(vagasInput)
 
-	// Coleta o preço por Section
-	fmt.Print("Preço por Section (R$): ")
-	var preco float64
-	fmt.Scanln(&preco)
+		valor, err := strconv.Atoi(vagasInput)
+		if err != nil || valor <= 0 {
+			fmt.Println(" Digite um número inteiro maior que zero.")
+			continue
+		}
+		vagas = valor
+		break
+	}
 
 	// Monta o payload conforme a struct PushRide.
 	// DriverEmail é o email de quem está logado — é isso que permite depois
 	// filtrar "minhas caronas" corretamente.
 	payload := protocol.PushRide{
-		Route:           rota,
-		DepartureTime:   depTime,
-		Capacity:        vagas,
-		PricePerSegment: preco,
-		DriverEmail:     cliente.UsuarioLogado,
+		Route:         rota,
+		DepartureTime: depTime,
+		Capacity:      vagas,
+		Precos:        precos,
+		DriverEmail:   cliente.UsuarioLogado,
 	}
 
 	// Envia a requisição via socket
@@ -65,6 +101,7 @@ func publicarCarona(cliente *connection.Cliente, reader *bufio.Reader) {
 		fmt.Printf("Erro ao publicar carona: %v\n", err)
 		return
 	}
+	fmt.Printf("DEBUG payload.Precos enviado: %#v\n", payload.Precos)
 
 	fmt.Printf("📩 Resposta do Servidor: [%s] %s\n", resp.Status, resp.Message)
 
@@ -129,19 +166,21 @@ func cancelarCarona(cliente *connection.Cliente, reader *bufio.Reader) {
 }
 
 func main() {
-	// Tenta conectar ao Servidor Central
-	conn, err := connection.ConectarAoServidor("localhost:9593", 5)
+	// Endereço do servidor agora é configurável via linha de comando.
+	// Se não for informado, usa localhost:9593 como padrão.
+	endereco := flag.String("addr", "localhost:9593", "Endereço do Servidor Central (ip:porta)")
+	flag.Parse()
+
+	conn, err := connection.ConectarAoServidor(*endereco, 5)
 	if err != nil {
 		fmt.Printf(" Erro ao conectar: %v\n", err)
 		os.Exit(1)
 	}
 	defer conn.Close()
 
-	// Cria a instância do cliente
 	cliente := connection.NewCliente("Motorista", conn)
-	fmt.Println("Conectado com sucesso ao Servidor Central do VaiJunto!")
+	fmt.Printf("Conectado com sucesso ao Servidor Central do VaiJunto em %s!\n", *endereco)
 
-	// Executa o loop do menu
 	reader := bufio.NewReader(os.Stdin)
 
 	for {

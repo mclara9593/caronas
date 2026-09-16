@@ -54,11 +54,11 @@ type LoginResult struct {
 // ============================
 
 type PushRide struct {
-	Route           []string `json:"route"`
-	DepartureTime   string   `json:"departure_time"`
-	Capacity        int      `json:"available_seats"`
-	PricePerSegment float64  `json:"price_per_segment"`
-	DriverEmail     string   `json:"driver_email"` // email do motorista logado que está publicando
+	Route         []string  `json:"route"`
+	DepartureTime string    `json:"departure_time"`
+	Capacity      int       `json:"available_seats"`
+	Precos        []float64 `json:"precos"`       // um preço por trecho: Precos[i] é o preço de Route[i] -> Route[i+1]
+	DriverEmail   string    `json:"driver_email"` // email do motorista logado que está publicando
 }
 
 // GetMyRidesRequest é usado pelo motorista pra consultar as caronas que ele mesmo publicou
