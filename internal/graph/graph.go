@@ -232,6 +232,7 @@ func (g *Grafo) RemoveRide(idRide string) {
 }
 
 // AdjustSeats decrementa ou incrementa assentos de forma atômica
+// AdjustSeats decrementa ou incrementa assentos de forma atômica
 func (g *Grafo) AdjustSeats(sectionIDs []string, delta int) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -256,7 +257,7 @@ func (g *Grafo) AdjustSeats(sectionIDs []string, delta int) bool {
 		}
 	}
 
-	// Aplicação da alteração nos trechos
+	// Aplicação da alteração nos trechos usados pela busca (g.Nodes)
 	for _, id := range sectionIDs {
 		for origem, list := range g.Nodes {
 			for i, sec := range list {
@@ -265,6 +266,20 @@ func (g *Grafo) AdjustSeats(sectionIDs []string, delta int) bool {
 				}
 			}
 		}
+	}
+
+	// Aplicação da alteração também na cópia guardada em g.Rides,
+	// que é o que "Consultar Minhas Caronas" (RidesByDriver) exibe.
+	// Sem isso, o motorista continua vendo o número antigo de assentos.
+	for rideID, ride := range g.Rides {
+		for i, sec := range ride.Sections {
+			for _, id := range sectionIDs {
+				if sec.IdSection == id {
+					ride.Sections[i].Assentos += delta
+				}
+			}
+		}
+		g.Rides[rideID] = ride
 	}
 
 	return true
